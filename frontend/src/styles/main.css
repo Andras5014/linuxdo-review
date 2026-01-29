@@ -1,0 +1,463 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ========================================
+   Light Theme (Default) - 类似 LINUX DO Credit 风格
+   ======================================== */
+:root,
+[data-theme="light"] {
+  /* Primary colors - 紫蓝色系 */
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-active: #4338ca;
+  --color-primary-light: #e0e7ff;
+  --color-primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  
+  /* Background colors - 柔和渐变 */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-gradient: linear-gradient(135deg, 
+    #f8fafc 0%, 
+    #e0e7ff 25%, 
+    #f0f9ff 50%, 
+    #faf5ff 75%, 
+    #f8fafc 100%);
+  --bg-hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, 
+    rgba(139, 92, 246, 0.15) 0%, 
+    rgba(99, 102, 241, 0.08) 40%, 
+    transparent 70%);
+  
+  /* Text colors */
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  /* Accent colors */
+  --color-success: #10b981;
+  --color-success-light: #d1fae5;
+  --color-warning: #f59e0b;
+  --color-warning-light: #fef3c7;
+  --color-error: #ef4444;
+  --color-error-light: #fee2e2;
+  --color-info: #3b82f6;
+  --color-info-light: #dbeafe;
+  
+  /* Border */
+  --border-color: rgba(148, 163, 184, 0.25);
+  --border-color-light: rgba(148, 163, 184, 0.12);
+  
+  /* Shadows - 柔和阴影 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.04);
+  
+  /* Glass effect */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  
+  /* Typography */
+  --font-sans: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  
+  /* Scrollbar */
+  --scrollbar-track: #f1f5f9;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-thumb-hover: #94a3b8;
+}
+
+/* ========================================
+   Dark Theme
+   ======================================== */
+[data-theme="dark"] {
+  /* Primary colors - 保持一致 */
+  --color-primary: #818cf8;
+  --color-primary-hover: #6366f1;
+  --color-primary-active: #4f46e5;
+  --color-primary-light: #312e81;
+  --color-primary-gradient: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #c084fc 100%);
+  
+  /* Background colors */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.85);
+  --bg-gradient: linear-gradient(135deg, 
+    #0f172a 0%, 
+    #1e1b4b 25%, 
+    #0f172a 50%, 
+    #1e1b4b 75%, 
+    #0f172a 100%);
+  --bg-hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, 
+    rgba(139, 92, 246, 0.25) 0%, 
+    rgba(99, 102, 241, 0.15) 40%, 
+    transparent 70%);
+  
+  /* Text colors */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  /* Accent colors */
+  --color-success: #34d399;
+  --color-success-light: #064e3b;
+  --color-warning: #fbbf24;
+  --color-warning-light: #78350f;
+  --color-error: #f87171;
+  --color-error-light: #7f1d1d;
+  --color-info: #60a5fa;
+  --color-info-light: #1e3a8a;
+  
+  /* Border */
+  --border-color: rgba(148, 163, 184, 0.2);
+  --border-color-light: rgba(148, 163, 184, 0.1);
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px rgba(129, 140, 248, 0.2);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
+  
+  /* Glass effect */
+  --glass-bg: rgba(30, 41, 59, 0.7);
+  --glass-border: rgba(148, 163, 184, 0.1);
+  
+  /* Scrollbar */
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #475569;
+  --scrollbar-thumb-hover: #64748b;
+}
+
+/* ========================================
+   Global Styles
+   ======================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* ========================================
+   Ant Design Vue Theme Override
+   ======================================== */
+.ant-btn-primary {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
+}
+
+.ant-btn-primary:hover {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+}
+
+.ant-input, 
+.ant-input-password,
+.ant-select-selector,
+.ant-picker {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  border-radius: 10px !important;
+  transition: all 0.2s ease !important;
+}
+
+.ant-input::placeholder,
+.ant-select-selection-placeholder {
+  color: var(--text-muted) !important;
+}
+
+.ant-input:focus, 
+.ant-input-focused,
+.ant-input-password:focus, 
+.ant-input-affix-wrapper-focused,
+.ant-select-focused .ant-select-selector {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+}
+
+.ant-form-item-label > label {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+}
+
+.ant-card {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color-light) !important;
+  border-radius: 16px !important;
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-card) !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-card:hover {
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.ant-card-head {
+  border-color: var(--border-color-light) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-card-head-title {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.ant-table {
+  background: var(--bg-card) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.ant-table-thead > tr > th {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-color-light) !important;
+  font-weight: 600;
+}
+
+.ant-table-tbody > tr > td {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color-light) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: var(--bg-tertiary) !important;
+}
+
+.ant-dropdown-menu {
+  background: var(--bg-card) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.ant-dropdown-menu-item {
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+  margin: 4px !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background: var(--bg-tertiary) !important;
+}
+
+.ant-message-notice-content {
+  background: var(--bg-card) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color-light) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--shadow-lg) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-content {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color-light) !important;
+  border-radius: 20px !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+
+.ant-modal-header {
+  background: transparent !important;
+  border-color: var(--border-color-light) !important;
+}
+
+.ant-modal-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-close-x {
+  color: var(--text-secondary) !important;
+}
+
+.ant-tag {
+  border-radius: 6px !important;
+  font-weight: 500;
+}
+
+.ant-pagination-item {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.ant-pagination-item a {
+  color: var(--text-primary) !important;
+}
+
+.ant-pagination-item-active {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.ant-pagination-item-active a {
+  color: white !important;
+}
+
+/* ========================================
+   Links
+   ======================================== */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* ========================================
+   Scrollbar
+   ======================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* ========================================
+   Animations
+   ======================================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.6s ease-out forwards;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, 
+    var(--bg-tertiary) 0%, 
+    var(--bg-secondary) 50%, 
+    var(--bg-tertiary) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ========================================
+   Utility Classes
+   ======================================== */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.gradient-text {
+  background: var(--color-primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-border {
+  border: 2px solid transparent;
+  background: linear-gradient(var(--bg-secondary), var(--bg-secondary)) padding-box,
+              var(--color-primary-gradient) border-box;
+  border-radius: 12px;
+}
+
+/* Theme transition */
+* {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
