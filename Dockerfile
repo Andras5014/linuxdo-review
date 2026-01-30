@@ -6,8 +6,8 @@ WORKDIR /app/frontend
 # 复制前端依赖文件
 COPY frontend/package*.json ./
 
-# 安装依赖
-RUN npm install
+# 安装所有依赖（包括 devDependencies）
+RUN npm install --include=dev
 
 # 复制前端源码
 COPY frontend/ ./
