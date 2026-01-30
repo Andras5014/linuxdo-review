@@ -16,10 +16,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ==================== 阶段2: 构建后端 ====================
-FROM golang:1.21-alpine AS backend-builder
-
-# 安装必要的构建工具
-RUN apk add --no-cache gcc musl-dev
+FROM golang:1.21-bookworm AS backend-builder
 
 WORKDIR /app/backend
 
@@ -33,13 +30,16 @@ RUN go mod download
 COPY backend/ ./
 
 # 构建后端 (启用 CGO 以支持 SQLite)
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o linuxdo-review .
+RUN CGO_ENABLED=1 go build -o linuxdo-review .
 
 # ==================== 阶段3: 运行时镜像 ====================
-FROM alpine:3.19
+FROM debian:bookworm-slim
 
-# 安装时区数据和 ca 证书
-RUN apk add --no-cache tzdata ca-certificates
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
 # 设置时区
 ENV TZ=Asia/Shanghai
