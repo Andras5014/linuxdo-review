@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Node
+frontend/node_modules
+frontend/.npm
+
+# Go
+backend/linuxdo-review
+
+# Data
+data/
+*.db
+
+# Config (需要通过 volume 挂载)
+config.yaml
+
+# Docs
+*.md
+LICENSE
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
