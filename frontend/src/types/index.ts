@@ -4,8 +4,13 @@ export interface User {
   email: string
   username: string
   role: UserRole
+  role_text?: string
   linuxdo_id?: string
   linuxdo_username?: string
+  avatar_url?: string
+  trust_level?: number
+  is_certified?: boolean
+  is_admin?: boolean
   created_at: string
 }
 
@@ -97,6 +102,15 @@ export interface VoteRequest {
   vote_type: VoteType
 }
 
+// 投票响应
+export interface VoteResponse {
+  post_id: number
+  vote_type: number
+  up_votes: number
+  down_votes: number
+  message: string
+}
+
 // 审核请求（提交邀请码）
 export interface ApproveRequest {
   invite_code: string
@@ -118,4 +132,44 @@ export interface SetupAdminRequest {
   email: string
   password: string
   username: string
+}
+
+// 更新个人资料请求
+export interface UpdateProfileRequest {
+  username?: string
+}
+
+// 绑定LinuxDO回调请求
+export interface BindLinuxDoCallbackRequest {
+  code: string
+  state: string
+  redirect_uri: string
+}
+
+// 绑定邮箱请求（LinuxDO用户）
+export interface BindEmailRequest {
+  email: string
+  password: string
+}
+
+// OAuth URL响应
+export interface OAuthURLResponse {
+  url: string
+  state?: string
+}
+
+// 发送邮箱验证码请求
+export interface SendEmailCodeRequest {
+  email: string
+}
+
+// 修改邮箱请求
+export interface ChangeEmailRequest {
+  new_email: string
+  code: string
+}
+
+// 更新头像请求
+export interface UpdateAvatarRequest {
+  avatar_url: string
 }

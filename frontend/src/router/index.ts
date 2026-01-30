@@ -55,6 +55,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '我的申请', requiresAuth: true },
   },
   {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('@/views/Profile.vue'),
+    meta: { title: '个人资料', requiresAuth: true },
+  },
+  {
+    path: '/bindlinuxdo/callback',
+    name: 'BindLinuxDoCallback',
+    component: () => import('@/views/BindLinuxDoCallback.vue'),
+    meta: { title: '绑定LinuxDo' }, // 移除 requiresAuth，在组件内部处理
+  },
+  {
     path: '/review',
     name: 'Review',
     component: () => import('@/views/Review.vue'),

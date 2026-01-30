@@ -32,6 +32,10 @@
             </div>
             <template #overlay>
               <a-menu>
+                <a-menu-item key="profile" @click="$router.push('/profile')">
+                  <UserOutlined />
+                  <span>个人资料</span>
+                </a-menu-item>
                 <a-menu-item key="my-posts" @click="$router.push('/my-posts')">
                   <FileTextOutlined />
                   <span>我的申请</span>

@@ -32,6 +32,10 @@
             </div>
             <template #overlay>
               <a-menu>
+                <a-menu-item key="profile" @click="$router.push('/profile')">
+                  <UserOutlined />
+                  <span>个人资料</span>
+                </a-menu-item>
                 <a-menu-item key="my-posts" @click="$router.push('/my-posts')">
                   <FileTextOutlined />
                   <span>我的申请</span>
@@ -63,164 +67,142 @@
               <span class="stat-value">{{ total }}</span>
               <span class="stat-label">待审核</span>
             </div>
+            <div v-if="skippedIds.length > 0" class="stat-item skipped">
+              <span class="stat-value">{{ skippedIds.length }}</span>
+              <span class="stat-label">已跳过</span>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="review-container">
         <a-spin :spinning="loading" tip="加载中...">
-          <div v-if="posts.length > 0" class="posts-list">
-            <div
-              v-for="(post, index) in posts"
-              :key="post.id"
-              class="review-card fade-in"
-              :style="{ animationDelay: `${index * 0.08}s` }"
-            >
+          <!-- 单卡片审核模式 -->
+          <div v-if="currentPost" class="single-card-container fade-in">
+            <div class="review-card">
               <div class="card-header">
                 <div class="applicant-info">
-                  <a-avatar :size="48" class="applicant-avatar">
-                    {{ (post.user?.username || 'U').charAt(0).toUpperCase() }}
+                  <a-avatar :size="56" class="applicant-avatar">
+                    {{ (currentPost.user?.username || 'U').charAt(0).toUpperCase() }}
                   </a-avatar>
                   <div class="applicant-details">
-                    <span class="applicant-name">{{ post.user?.username || '匿名用户' }}</span>
-                    <span class="applicant-email">{{ post.user?.email }}</span>
+                    <span class="applicant-name">{{ currentPost.user?.username || '匿名用户' }}</span>
+                    <span class="applicant-email">{{ currentPost.user?.email }}</span>
+                    <span class="applicant-time">
+                      <ClockCircleOutlined />
+                      申请于 {{ formatTime(currentPost.created_at) }}
+                    </span>
                   </div>
                 </div>
                 <div class="vote-stats">
                   <div class="vote-item up">
                     <LikeOutlined />
-                    <span>{{ post.up_votes }}</span>
+                    <span>{{ currentPost.up_votes }}</span>
                   </div>
                   <div class="vote-item down">
                     <DislikeOutlined />
-                    <span>{{ post.down_votes }}</span>
+                    <span>{{ currentPost.down_votes }}</span>
                   </div>
-                  <div class="approval-rate" :class="getApprovalClass(post)">
-                    {{ calculateApprovalRate(post) }}%
+                  <div class="approval-rate" :class="getApprovalClass(currentPost)">
+                    {{ calculateApprovalRate(currentPost) }}%
                   </div>
                 </div>
               </div>
 
-              <div class="card-content" @click="showDetail(post)">
-                <h3 class="post-title">{{ post.title }}</h3>
-                <p class="post-excerpt">{{ truncateContent(post.content) }}</p>
+              <div class="card-content">
+                <h2 class="post-title">{{ currentPost.title }}</h2>
+                <div class="post-body" v-html="formatContent(currentPost.content)"></div>
               </div>
 
-              <div class="card-meta">
-                <span class="meta-item">
-                  <ClockCircleOutlined />
-                  {{ formatTime(post.created_at) }}
-                </span>
-                <span class="meta-item">
+              <div class="card-footer">
+                <div class="total-votes">
                   <UserOutlined />
-                  共 {{ post.up_votes + post.down_votes }} 票
-                </span>
+                  共 {{ currentPost.up_votes + currentPost.down_votes }} 票
+                </div>
               </div>
 
-              <div class="card-actions">
+              <!-- 操作按钮 -->
+              <div class="action-buttons">
                 <a-button 
                   type="primary" 
                   size="large" 
-                  class="approve-btn"
-                  @click="openApproveModal(post)"
+                  class="action-btn approve-btn"
+                  :loading="approving"
+                  @click="openApproveModal"
                 >
                   <template #icon><CheckOutlined /></template>
-                  通过并发放邀请码
+                  同意
+                </a-button>
+                <a-button 
+                  size="large" 
+                  class="action-btn skip-btn"
+                  :loading="skipping"
+                  @click="handleSkip"
+                >
+                  <template #icon><ForwardOutlined /></template>
+                  跳过
                 </a-button>
                 <a-button 
                   danger 
                   size="large" 
-                  class="reject-btn"
-                  @click="openRejectModal(post)"
+                  class="action-btn reject-btn"
+                  :loading="rejecting"
+                  @click="openRejectModal"
                 >
                   <template #icon><CloseOutlined /></template>
                   拒绝
                 </a-button>
               </div>
+
+              <!-- 进度指示 -->
+              <div v-if="total > 0" class="progress-indicator">
+                <div class="progress-text">
+                  <span>审核进度</span>
+                  <span>{{ skippedIds.length + 1 }} / {{ total }}</span>
+                </div>
+                <a-progress 
+                  :percent="Math.round(((skippedIds.length + 1) / total) * 100)" 
+                  :show-info="false"
+                  stroke-color="#f59e0b"
+                />
+              </div>
+            </div>
+
+            <!-- 重置跳过按钮 -->
+            <div v-if="skippedIds.length > 0" class="reset-container">
+              <a-button type="link" class="reset-btn" @click="resetSkipped">
+                <ReloadOutlined />
+                重新审核已跳过的 {{ skippedIds.length }} 个申请
+              </a-button>
             </div>
           </div>
 
-          <a-empty v-else-if="!loading" description="暂无待审核的申请">
-            <p class="empty-hint">所有通过社区投票的申请都会出现在这里</p>
-          </a-empty>
+          <!-- 空状态 -->
+          <div v-else-if="!loading" class="empty-state">
+            <div class="empty-icon">🎉</div>
+            <h3 class="empty-title">
+              {{ skippedIds.length > 0 ? '当前批次已审核完毕' : '暂无待审核的申请' }}
+            </h3>
+            <p class="empty-desc">
+              {{ skippedIds.length > 0 
+                ? `您已跳过 ${skippedIds.length} 个申请，可以重新审核` 
+                : '所有通过社区投票的申请都会出现在这里' 
+              }}
+            </p>
+            <a-button 
+              v-if="skippedIds.length > 0" 
+              type="primary" 
+              size="large"
+              class="reset-all-btn"
+              @click="resetSkipped"
+            >
+              <ReloadOutlined />
+              重新审核已跳过的申请
+            </a-button>
+          </div>
         </a-spin>
-
-        <div v-if="total > pageSize" class="pagination-container">
-          <a-pagination
-            v-model:current="currentPage"
-            :total="total"
-            :page-size="pageSize"
-            show-quick-jumper
-            @change="handlePageChange"
-          />
-        </div>
       </div>
     </main>
-
-    <!-- 帖子详情弹窗 -->
-    <a-modal
-      v-model:open="detailModalVisible"
-      :title="null"
-      :footer="null"
-      width="800px"
-      class="detail-modal"
-      centered
-    >
-      <div v-if="selectedPost" class="detail-content">
-        <div class="detail-header">
-          <div class="detail-applicant">
-            <a-avatar :size="56" class="applicant-avatar">
-              {{ (selectedPost.user?.username || 'U').charAt(0).toUpperCase() }}
-            </a-avatar>
-            <div class="applicant-details">
-              <span class="applicant-name">{{ selectedPost.user?.username || '匿名用户' }}</span>
-              <span class="applicant-email">{{ selectedPost.user?.email }}</span>
-              <span class="applicant-time">申请于 {{ formatTime(selectedPost.created_at) }}</span>
-            </div>
-          </div>
-          <div class="detail-stats">
-            <div class="stat-box">
-              <span class="stat-number up">{{ selectedPost.up_votes }}</span>
-              <span class="stat-label">赞成</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-number down">{{ selectedPost.down_votes }}</span>
-              <span class="stat-label">反对</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-number" :class="getApprovalClass(selectedPost)">
-                {{ calculateApprovalRate(selectedPost) }}%
-              </span>
-              <span class="stat-label">赞成率</span>
-            </div>
-          </div>
-        </div>
-
-        <h2 class="detail-title">{{ selectedPost.title }}</h2>
-        <div class="detail-body" v-html="formatContent(selectedPost.content)"></div>
-
-        <div class="detail-actions">
-          <a-button 
-            type="primary" 
-            size="large" 
-            class="approve-btn"
-            @click="openApproveModal(selectedPost); detailModalVisible = false"
-          >
-            <template #icon><CheckOutlined /></template>
-            通过并发放邀请码
-          </a-button>
-          <a-button 
-            danger 
-            size="large" 
-            class="reject-btn"
-            @click="openRejectModal(selectedPost); detailModalVisible = false"
-          >
-            <template #icon><CloseOutlined /></template>
-            拒绝申请
-          </a-button>
-        </div>
-      </div>
-    </a-modal>
 
     <!-- 通过审核弹窗 -->
     <a-modal
@@ -242,9 +224,9 @@
           class="approve-alert"
         />
         
-        <div v-if="targetPost" class="target-info">
+        <div v-if="currentPost" class="target-info">
           <span class="label">申请者：</span>
-          <span class="value">{{ targetPost.user?.username }} ({{ targetPost.user?.email }})</span>
+          <span class="value">{{ currentPost.user?.username }} ({{ currentPost.user?.email }})</span>
         </div>
 
         <a-form-item label="邀请码" :required="true" class="invite-code-item">
@@ -284,9 +266,9 @@
           class="reject-alert"
         />
         
-        <div v-if="targetPost" class="target-info">
+        <div v-if="currentPost" class="target-info">
           <span class="label">申请者：</span>
-          <span class="value">{{ targetPost.user?.username }}</span>
+          <span class="value">{{ currentPost.user?.username }}</span>
         </div>
 
         <a-form-item label="拒绝原因（可选）" class="reject-reason-item">
@@ -307,7 +289,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -322,10 +304,12 @@ import {
   CheckOutlined,
   CloseOutlined,
   GiftOutlined,
+  ForwardOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
-import { getReviewPosts, approvePost, rejectPost } from '@/api/post'
+import { getNextReviewPost, skipPost, approvePost, rejectPost } from '@/api/post'
 import type { Post } from '@/types'
 
 const router = useRouter()
@@ -337,31 +321,25 @@ const toggleTheme = () => {
 }
 
 const loading = ref(false)
-const posts = ref<Post[]>([])
-const currentPage = ref(1)
-const pageSize = ref(10)
+const currentPost = ref<Post | null>(null)
 const total = ref(0)
-
-const detailModalVisible = ref(false)
-const selectedPost = ref<Post | null>(null)
+const skippedIds = ref<number[]>([])
 
 const approveModalVisible = ref(false)
 const rejectModalVisible = ref(false)
-const targetPost = ref<Post | null>(null)
 const inviteCode = ref('')
 const rejectReason = ref('')
 const approving = ref(false)
 const rejecting = ref(false)
+const skipping = ref(false)
 
-const fetchPosts = async () => {
+// 获取下一个待审核的帖子
+const fetchNextPost = async () => {
   loading.value = true
   try {
-    const response = await getReviewPosts({
-      page: currentPage.value,
-      page_size: pageSize.value,
-    })
+    const response = await getNextReviewPost(skippedIds.value)
     const data = response.data.data
-    posts.value = data.list || []
+    currentPost.value = data.post
     total.value = data.total
   } catch {
     // 错误已在拦截器中处理
@@ -370,25 +348,35 @@ const fetchPosts = async () => {
   }
 }
 
-const handlePageChange = (page: number) => {
-  currentPage.value = page
-  fetchPosts()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+// 跳过当前帖子
+const handleSkip = async () => {
+  if (!currentPost.value) return
+
+  skipping.value = true
+  try {
+    await skipPost(currentPost.value.id)
+    skippedIds.value.push(currentPost.value.id)
+    message.info('已跳过当前申请')
+    await fetchNextPost()
+  } catch {
+    // 错误已在拦截器中处理
+  } finally {
+    skipping.value = false
+  }
 }
 
-const showDetail = (post: Post) => {
-  selectedPost.value = post
-  detailModalVisible.value = true
+// 重置跳过列表
+const resetSkipped = () => {
+  skippedIds.value = []
+  fetchNextPost()
 }
 
-const openApproveModal = (post: Post) => {
-  targetPost.value = post
+const openApproveModal = () => {
   inviteCode.value = ''
   approveModalVisible.value = true
 }
 
-const openRejectModal = (post: Post) => {
-  targetPost.value = post
+const openRejectModal = () => {
   rejectReason.value = ''
   rejectModalVisible.value = true
 }
@@ -399,16 +387,15 @@ const handleApprove = async () => {
     return
   }
 
-  if (!targetPost.value) return
+  if (!currentPost.value) return
 
   approving.value = true
   try {
-    await approvePost(targetPost.value.id, { invite_code: inviteCode.value.trim() })
+    await approvePost(currentPost.value.id, { invite_code: inviteCode.value.trim() })
     message.success('审核通过，邀请码已发送至申请者邮箱')
     approveModalVisible.value = false
-    // 从列表中移除
-    posts.value = posts.value.filter(p => p.id !== targetPost.value?.id)
     total.value--
+    await fetchNextPost()
   } catch {
     // 错误已在拦截器中处理
   } finally {
@@ -417,16 +404,15 @@ const handleApprove = async () => {
 }
 
 const handleReject = async () => {
-  if (!targetPost.value) return
+  if (!currentPost.value) return
 
   rejecting.value = true
   try {
-    await rejectPost(targetPost.value.id, rejectReason.value.trim() || undefined)
+    await rejectPost(currentPost.value.id, rejectReason.value.trim() || undefined)
     message.success('已拒绝该申请')
     rejectModalVisible.value = false
-    // 从列表中移除
-    posts.value = posts.value.filter(p => p.id !== targetPost.value?.id)
     total.value--
+    await fetchNextPost()
   } catch {
     // 错误已在拦截器中处理
   } finally {
@@ -451,11 +437,6 @@ const formatTime = (dateStr: string) => {
   })
 }
 
-const truncateContent = (content: string, maxLength = 200) => {
-  if (content.length <= maxLength) return content
-  return content.slice(0, maxLength) + '...'
-}
-
 const formatContent = (content: string) => {
   return content.replace(/\n/g, '<br>')
 }
@@ -473,14 +454,34 @@ const getApprovalClass = (post: Post) => {
   return 'rate-low'
 }
 
+// 页面离开时释放锁定
+const handleBeforeUnload = () => {
+  if (currentPost.value) {
+    // 使用 sendBeacon 在页面关闭时发送请求
+    const url = `/api/review/${currentPost.value.id}/skip`
+    navigator.sendBeacon(url)
+  }
+}
+
 onMounted(() => {
-  // 检查是否有权限访问
-  if (!userStore.isCertified) {
-    message.warning('需要认证用户权限才能访问')
+  // 检查是否有权限访问 (trust_level >= 3 或管理员)
+  if (!userStore.canReview) {
+    message.warning('需要 Linux.do 信任等级3及以上或管理员权限')
     router.push('/posts')
     return
   }
-  fetchPosts()
+  fetchNextPost()
+  
+  // 监听页面关闭事件
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  // 组件卸载时也释放锁定
+  if (currentPost.value) {
+    skipPost(currentPost.value.id).catch(() => {})
+  }
 })
 </script>
 
@@ -642,7 +643,7 @@ onMounted(() => {
 
 /* Page Header */
 .page-header {
-  max-width: 1200px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 40px 24px 24px;
 }
@@ -674,7 +675,7 @@ onMounted(() => {
 
 .header-stats {
   display: flex;
-  gap: 20px;
+  gap: 16px;
 }
 
 .stat-item {
@@ -686,6 +687,11 @@ onMounted(() => {
   border: 1px solid var(--border-color-light);
   border-radius: 16px;
   backdrop-filter: blur(20px);
+}
+
+.stat-item.skipped {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.05);
 }
 
 .stat-value {
@@ -702,12 +708,13 @@ onMounted(() => {
 
 /* Review Container */
 .review-container {
-  max-width: 1200px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 0 24px;
 }
 
-.posts-list {
+/* Single Card Container */
+.single-card-container {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -717,27 +724,24 @@ onMounted(() => {
   background: var(--bg-card);
   border: 1px solid var(--border-color-light);
   border-radius: 24px;
-  padding: 28px;
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  padding: 32px;
+  transition: transform 0.2s, box-shadow 0.2s;
   backdrop-filter: blur(20px);
-}
-
-.review-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .applicant-info {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
 }
 
@@ -745,40 +749,49 @@ onMounted(() => {
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
   color: white !important;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .applicant-details {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
 .applicant-name {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .applicant-email {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.applicant-time {
   font-size: 13px;
   color: var(--text-muted);
-  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .vote-stats {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .vote-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 10px 16px;
+  border-radius: 12px;
   background: var(--bg-tertiary);
 }
 
@@ -791,10 +804,10 @@ onMounted(() => {
 }
 
 .approval-rate {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  padding: 8px 16px;
-  border-radius: 10px;
+  padding: 10px 18px;
+  border-radius: 12px;
   background: var(--bg-tertiary);
 }
 
@@ -811,158 +824,155 @@ onMounted(() => {
 }
 
 .card-content {
-  cursor: pointer;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .post-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-  line-height: 1.4;
-}
-
-.post-excerpt {
-  color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.7;
-}
-
-.card-meta {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.card-actions {
-  display: flex;
-  gap: 16px;
-}
-
-.approve-btn {
-  flex: 1;
-  height: 48px !important;
-  border-radius: 12px !important;
-  font-weight: 600 !important;
-  font-size: 15px !important;
-  background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%) !important;
-  border: none !important;
-}
-
-.approve-btn:hover {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
-}
-
-.reject-btn {
-  flex: 1;
-  height: 48px !important;
-  border-radius: 12px !important;
-  font-weight: 600 !important;
-  font-size: 15px !important;
-}
-
-/* Detail Modal */
-.detail-modal :deep(.ant-modal-content) {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 24px;
-  overflow: hidden;
-}
-
-.detail-content {
-  padding: 8px;
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 28px;
-}
-
-.detail-applicant {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.detail-applicant .applicant-details {
-  gap: 4px;
-}
-
-.applicant-time {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.detail-stats {
-  display: flex;
-  gap: 20px;
-}
-
-.stat-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px 20px;
-  background: var(--bg-tertiary);
-  border-radius: 12px;
-}
-
-.stat-number {
   font-size: 24px;
-  font-weight: 700;
-}
-
-.stat-number.up {
-  color: var(--color-success);
-}
-
-.stat-number.down {
-  color: var(--color-error);
-}
-
-.stat-box .stat-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.detail-title {
-  font-size: 26px;
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 20px;
   line-height: 1.4;
 }
 
-.detail-body {
+.post-body {
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.9;
-  margin-bottom: 28px;
   max-height: 400px;
   overflow-y: auto;
   padding-right: 8px;
 }
 
-.detail-actions {
+.card-footer {
+  display: flex;
+  gap: 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 28px;
+}
+
+.total-votes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Action Buttons */
+.action-buttons {
   display: flex;
   gap: 16px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-color);
+  margin-bottom: 24px;
+}
+
+.action-btn {
+  flex: 1;
+  height: 56px !important;
+  border-radius: 14px !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.approve-btn {
+  background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.approve-btn:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.skip-btn {
+  background: var(--bg-tertiary) !important;
+  border: 2px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.skip-btn:hover {
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.1) !important;
+}
+
+.reject-btn {
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.2);
+}
+
+.reject-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+}
+
+/* Progress Indicator */
+.progress-indicator {
+  padding: 16px 20px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Reset Container */
+.reset-container {
+  text-align: center;
+}
+
+.reset-btn {
+  color: var(--text-muted) !important;
+  font-size: 14px;
+}
+
+.reset-btn:hover {
+  color: #f59e0b !important;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 80px 24px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 24px;
+}
+
+.empty-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.empty-desc {
+  color: var(--text-muted);
+  font-size: 16px;
+  margin-bottom: 32px;
+}
+
+.reset-all-btn {
+  height: 48px !important;
+  padding: 0 32px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  border: none !important;
 }
 
 /* Approve Modal */
@@ -1062,20 +1072,6 @@ onMounted(() => {
   border-radius: 12px !important;
 }
 
-/* Empty */
-.empty-hint {
-  color: var(--text-muted);
-  font-size: 14px;
-  margin-top: 8px;
-}
-
-/* Pagination */
-.pagination-container {
-  display: flex;
-  justify-content: center;
-  margin-top: 40px;
-}
-
 /* Footer */
 .footer {
   padding: 24px;
@@ -1085,6 +1081,37 @@ onMounted(() => {
   font-size: 14px;
   background: var(--glass-bg);
   backdrop-filter: blur(10px);
+}
+
+/* Animations */
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Responsive */
@@ -1098,24 +1125,23 @@ onMounted(() => {
     font-size: 24px;
   }
 
+  .header-stats {
+    width: 100%;
+    justify-content: space-around;
+  }
+
   .card-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .card-actions {
-    flex-direction: column;
-  }
-
-  .detail-header {
     flex-direction: column;
     gap: 20px;
   }
 
-  .detail-stats {
+  .vote-stats {
     width: 100%;
     justify-content: space-around;
+  }
+
+  .action-buttons {
+    flex-direction: column;
   }
 
   .nav {

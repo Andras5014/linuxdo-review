@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 
 	"linuxdo-review/dto"
 	"linuxdo-review/middleware"
@@ -41,8 +42,8 @@ func (h *ReviewHandler) Approve(c *gin.Context) {
 	}
 
 	reviewerID := middleware.GetUserID(c)
-	// ReviewService 内部会处理邮件通知
-	if err := h.reviewService.ApproveWithNotification(uint(id), reviewerID, req.InviteCode); err != nil {
+	// 检查锁定状态并通过审核
+	if err := h.reviewService.CheckLockAndApprove(uint(id), reviewerID, req.InviteCode); err != nil {
 		response.Error(c, err.Error())
 		return
 	}
@@ -63,11 +64,64 @@ func (h *ReviewHandler) Reject(c *gin.Context) {
 	// 允许不提供拒绝原因
 	_ = c.ShouldBindJSON(&req)
 
-	// ReviewService 内部会处理邮件通知
-	if err := h.reviewService.RejectWithNotification(uint(id), req.Reason); err != nil {
+	userID := middleware.GetUserID(c)
+	// 检查锁定状态并拒绝
+	if err := h.reviewService.CheckLockAndReject(uint(id), userID, req.Reason); err != nil {
 		response.Error(c, err.Error())
 		return
 	}
 
 	response.SuccessMessage(c, "已拒绝")
+}
+
+// GetNext 获取下一个待审核的帖子
+func (h *ReviewHandler) GetNext(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	// 获取要跳过的帖子ID列表（逗号分隔）
+	skipIDsStr := c.Query("skip_ids")
+	var skipIDs []uint
+	if skipIDsStr != "" {
+		for _, idStr := range strings.Split(skipIDsStr, ",") {
+			if id, err := strconv.ParseUint(strings.TrimSpace(idStr), 10, 32); err == nil {
+				skipIDs = append(skipIDs, uint(id))
+			}
+		}
+	}
+
+	post, err := h.reviewService.GetNextForReview(userID, skipIDs)
+	if err != nil {
+		// 没有更多待审核的帖子
+		response.Success(c, gin.H{
+			"post":  nil,
+			"total": 0,
+		})
+		return
+	}
+
+	// 获取总数
+	total, _ := h.reviewService.GetReviewCount()
+
+	response.Success(c, gin.H{
+		"post":  post,
+		"total": total,
+	})
+}
+
+// Skip 跳过当前帖子
+func (h *ReviewHandler) Skip(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的帖子ID")
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	if err := h.reviewService.SkipPost(uint(id), userID); err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.SuccessMessage(c, "已跳过")
 }

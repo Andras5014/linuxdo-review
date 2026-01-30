@@ -1,10 +1,15 @@
 package repository
 
 import (
+	"time"
+
 	"linuxdo-review/models"
 
 	"gorm.io/gorm"
 )
+
+// 锁定超时时间（分钟）
+const LockTimeout = 5
 
 // PostRepository 帖子仓库
 type PostRepository struct {
@@ -192,4 +197,101 @@ func (r *PostRepository) ListWithFilter(status *int, offset, limit int) ([]*mode
 	}
 
 	return posts, total, nil
+}
+
+// HasApprovedPost 检查用户是否有已通过的帖子
+func (r *PostRepository) HasApprovedPost(userID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&models.Post{}).
+		Where("user_id = ? AND status = ?", userID, models.StatusApproved).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// HasPendingOrVotingPost 检查用户是否有投票中或待二级审核的帖子
+func (r *PostRepository) HasPendingOrVotingPost(userID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&models.Post{}).
+		Where("user_id = ? AND status IN ?", userID, []models.PostStatus{
+			models.StatusPending,
+			models.StatusFirstReview,
+			models.StatusSecondReview,
+		}).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// GetNextForReview 获取下一个待二级审核的帖子（排除已锁定或过期锁定的）
+func (r *PostRepository) GetNextForReview(userID uint, skipIDs []uint) (*models.Post, error) {
+	var post models.Post
+	now := time.Now()
+	lockExpiry := now.Add(-LockTimeout * time.Minute)
+
+	query := r.db.Preload("User").
+		Where("status = ?", models.StatusSecondReview).
+		Where("(locked_by IS NULL OR locked_by = ? OR locked_at < ?)", userID, lockExpiry)
+
+	// 排除已跳过的帖子
+	if len(skipIDs) > 0 {
+		query = query.Where("id NOT IN ?", skipIDs)
+	}
+
+	err := query.Order("created_at ASC").First(&post).Error
+	if err != nil {
+		return nil, err
+	}
+	return &post, nil
+}
+
+// LockPost 锁定帖子（防止并发操作）
+func (r *PostRepository) LockPost(postID uint, userID uint) error {
+	now := time.Now()
+	lockExpiry := now.Add(-LockTimeout * time.Minute)
+
+	// 只有未锁定或锁定过期或被同一用户锁定的帖子才能被锁定
+	result := r.db.Model(&models.Post{}).
+		Where("id = ? AND status = ?", postID, models.StatusSecondReview).
+		Where("(locked_by IS NULL OR locked_by = ? OR locked_at < ?)", userID, lockExpiry).
+		Updates(map[string]interface{}{
+			"locked_by": userID,
+			"locked_at": now,
+		})
+
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return result.Error
+}
+
+// UnlockPost 解锁帖子
+func (r *PostRepository) UnlockPost(postID uint, userID uint) error {
+	return r.db.Model(&models.Post{}).
+		Where("id = ? AND locked_by = ?", postID, userID).
+		Updates(map[string]interface{}{
+			"locked_by": nil,
+			"locked_at": nil,
+		}).Error
+}
+
+// IsPostLocked 检查帖子是否被锁定（且锁定未过期，且不是当前用户锁定的）
+func (r *PostRepository) IsPostLocked(postID uint, userID uint) (bool, error) {
+	var count int64
+	now := time.Now()
+	lockExpiry := now.Add(-LockTimeout * time.Minute)
+
+	err := r.db.Model(&models.Post{}).
+		Where("id = ?", postID).
+		Where("locked_by IS NOT NULL AND locked_by != ? AND locked_at > ?", userID, lockExpiry).
+		Count(&count).Error
+
+	return count > 0, err
+}
+
+// CountForSecondReview 统计待二级审核的帖子数量
+func (r *PostRepository) CountForSecondReview() (int64, error) {
+	var count int64
+	err := r.db.Model(&models.Post{}).
+		Where("status = ?", models.StatusSecondReview).
+		Count(&count).Error
+	return count, err
 }

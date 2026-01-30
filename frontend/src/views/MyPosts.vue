@@ -10,7 +10,7 @@
         
         <nav class="nav">
           <router-link to="/posts" class="nav-link">申请列表</router-link>
-          <router-link v-if="userStore.isCertified" to="/review" class="nav-link">二级审核</router-link>
+          <router-link v-if="userStore.canReview" to="/review" class="nav-link">二级审核</router-link>
           <router-link v-if="userStore.isAdmin" to="/admin" class="nav-link">管理后台</router-link>
           
           <!-- 主题切换按钮 -->
@@ -31,6 +31,10 @@
             </div>
             <template #overlay>
               <a-menu>
+                <a-menu-item key="profile" @click="$router.push('/profile')">
+                  <UserOutlined />
+                  <span>个人资料</span>
+                </a-menu-item>
                 <a-menu-item key="my-posts" class="active-menu">
                   <FileTextOutlined />
                   <span>我的申请</span>
@@ -180,6 +184,7 @@ import {
   CloseCircleOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
+  UserOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'

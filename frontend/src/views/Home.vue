@@ -5,12 +5,12 @@
         <div class="logo">
           <span class="logo-icon">🚀</span>
           <span class="logo-text">Linux.do</span>
-          <span class="logo-badge">邀请码申请</span>
+          <span class="logo-badge">邀请码预申请</span>
         </div>
         
         <nav class="nav">
           <router-link to="/posts" class="nav-link">申请列表</router-link>
-          <router-link v-if="userStore.isCertified" to="/review" class="nav-link">二级审核</router-link>
+          <router-link v-if="userStore.canReview" to="/review" class="nav-link">二级审核</router-link>
           <router-link v-if="userStore.isAdmin" to="/admin" class="nav-link">管理后台</router-link>
           
           <!-- 主题切换按钮 -->
@@ -32,6 +32,10 @@
               </div>
               <template #overlay>
                 <a-menu>
+                  <a-menu-item key="profile" @click="$router.push('/profile')">
+                    <UserOutlined />
+                    <span>个人资料</span>
+                  </a-menu-item>
                   <a-menu-item key="my-posts" @click="$router.push('/my-posts')">
                     <FileTextOutlined />
                     <span>我的申请</span>
@@ -68,7 +72,7 @@
         
         <div class="hero-content slide-up">
           <h1 class="hero-title">
-            <span class="gradient-text">Linux.do</span> 邀请码申请系统
+            <span class="gradient-text">Linux.do</span> 邀请码预申请
           </h1>
           <p class="hero-description">
             通过社区投票和认证用户审核的两级机制，公平透明地分发邀请码
@@ -204,7 +208,7 @@
     </main>
 
     <footer class="footer">
-      <p>© 2024 Linux.do 邀请码申请系统 · 社区驱动的公平分发平台</p>
+      <p>© 2024 Linux.do 邀请码预申请 · 社区驱动的公平分发平台</p>
     </footer>
   </div>
 </template>
@@ -225,6 +229,7 @@ import {
   ThunderboltOutlined,
   GlobalOutlined,
   SafetyOutlined,
+  UserOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'

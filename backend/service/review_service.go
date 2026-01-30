@@ -186,6 +186,59 @@ func (s *ReviewService) GetPostByID(postID uint) (*models.Post, error) {
 	return s.postRepo.FindByIDWithReviewer(postID)
 }
 
+// GetNextForReview 获取下一个待审核的帖子并锁定
+func (s *ReviewService) GetNextForReview(userID uint, skipIDs []uint) (*models.Post, error) {
+	post, err := s.postRepo.GetNextForReview(userID, skipIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// 锁定帖子
+	if err := s.postRepo.LockPost(post.ID, userID); err != nil {
+		return nil, errors.New("帖子已被其他审核员锁定")
+	}
+
+	return post, nil
+}
+
+// SkipPost 跳过当前帖子（解锁）
+func (s *ReviewService) SkipPost(postID uint, userID uint) error {
+	return s.postRepo.UnlockPost(postID, userID)
+}
+
+// CheckLockAndApprove 检查锁定状态并通过审核
+func (s *ReviewService) CheckLockAndApprove(postID uint, reviewerID uint, inviteCode string) error {
+	// 检查帖子是否被其他用户锁定
+	locked, err := s.postRepo.IsPostLocked(postID, reviewerID)
+	if err != nil {
+		return err
+	}
+	if locked {
+		return errors.New("帖子已被其他审核员锁定，请刷新后重试")
+	}
+
+	return s.ApproveWithNotification(postID, reviewerID, inviteCode)
+}
+
+// CheckLockAndReject 检查锁定状态并拒绝
+func (s *ReviewService) CheckLockAndReject(postID uint, userID uint, reason string) error {
+	// 检查帖子是否被其他用户锁定
+	locked, err := s.postRepo.IsPostLocked(postID, userID)
+	if err != nil {
+		return err
+	}
+	if locked {
+		return errors.New("帖子已被其他审核员锁定，请刷新后重试")
+	}
+
+	return s.RejectWithNotification(postID, reason)
+}
+
+// GetReviewCount 获取待二级审核的数量
+func (s *ReviewService) GetReviewCount() (int64, error) {
+	return s.postRepo.CountForSecondReview()
+}
+
 // getReviewConfig 获取审核配置
 func (s *ReviewService) getReviewConfig() (minVotes int, approvalRate int) {
 	// 默认值

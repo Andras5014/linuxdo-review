@@ -16,10 +16,12 @@ var (
 
 // Claims JWT声明
 type Claims struct {
-	UserID   uint   `json:"user_id"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Role     int    `json:"role"`
+	UserID     uint   `json:"user_id"`
+	Email      string `json:"email"`
+	Username   string `json:"username"`
+	Role       int    `json:"role"`
+	TrustLevel int    `json:"trust_level"`
+	LinuxDoID  string `json:"linuxdo_id"`
 	jwt.RegisteredClaims
 }
 
@@ -38,12 +40,14 @@ func NewJWTManager(secret string, expireHours int) *JWTManager {
 }
 
 // GenerateToken 生成JWT Token
-func (m *JWTManager) GenerateToken(userID uint, email, username string, role int) (string, error) {
+func (m *JWTManager) GenerateToken(userID uint, email, username string, role int, trustLevel int, linuxDoID string) (string, error) {
 	claims := Claims{
-		UserID:   userID,
-		Email:    email,
-		Username: username,
-		Role:     role,
+		UserID:     userID,
+		Email:      email,
+		Username:   username,
+		Role:       role,
+		TrustLevel: trustLevel,
+		LinuxDoID:  linuxDoID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(m.expireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

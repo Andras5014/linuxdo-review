@@ -103,46 +103,59 @@ func (h *AuthHandler) OAuthLinuxDoRedirect(c *gin.Context) {
 	c.Redirect(302, authURL)
 }
 
-// OAuthLinuxDoCallback Linux.do OAuth回调
+// OAuthLinuxDoCallback Linux.do OAuth回调（支持登录和绑定两种模式）
 func (h *AuthHandler) OAuthLinuxDoCallback(c *gin.Context) {
 	code := c.Query("code")
 	state := c.Query("state")
 	errorParam := c.Query("error")
 
+	// 获取前端基础地址
+	frontendBaseURL := h.cfg.Server.FrontendURL
+	if frontendBaseURL == "" {
+		scheme := "http"
+		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		frontendBaseURL = scheme + "://" + c.Request.Host
+	}
+
+	// 默认登录回调地址
+	frontendCallbackURL := frontendBaseURL + "/oauth/callback"
+
 	// 检查是否有错误
 	if errorParam != "" {
 		errorDesc := c.Query("error_description")
-		response.Error(c, "OAuth授权失败: "+errorDesc)
+		c.Redirect(302, frontendCallbackURL+"?error="+errorParam+"&error_description="+errorDesc)
 		return
 	}
 
 	if code == "" {
-		response.BadRequest(c, "缺少授权码")
+		c.Redirect(302, frontendCallbackURL+"?error=missing_code&error_description=缺少授权码")
 		return
 	}
 
 	if state == "" {
-		response.BadRequest(c, "缺少state参数")
+		c.Redirect(302, frontendCallbackURL+"?error=missing_state&error_description=缺少state参数")
 		return
 	}
 
 	// 处理OAuth回调
 	result, err := h.authService.HandleOAuthCallback(code, state)
 	if err != nil {
-		response.Error(c, err.Error())
+		// 如果是绑定模式失败，重定向到绑定回调页面
+		c.Redirect(302, frontendCallbackURL+"?error=oauth_failed&error_description="+err.Error())
 		return
 	}
 
-	// 如果配置了前端回调URL,重定向到前端页面
-	// 否则直接返回JSON
-	frontendURL := c.Query("redirect_uri")
-	if frontendURL != "" {
-		// 重定向到前端,带上token
-		c.Redirect(302, frontendURL+"?token="+result.Token)
-		return
+	// 根据模式重定向到不同的前端页面
+	if result.IsBindMode {
+		// 绑定模式：直接重定向到个人信息页面，带上绑定成功标识
+		profileURL := frontendBaseURL + "/profile?bindSuccess=true"
+		c.Redirect(302, profileURL)
+	} else {
+		// 登录模式：重定向到登录回调页面
+		c.Redirect(302, frontendCallbackURL+"?token="+result.LoginResponse.Token)
 	}
-
-	response.Success(c, result)
 }
 
 // GetSystemStatus 获取系统状态（是否已初始化）
@@ -167,6 +180,165 @@ func (h *AuthHandler) SetupAdmin(c *gin.Context) {
 	}
 
 	user, err := h.authService.SetupAdmin(&req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, dto.ToUserResponse(user))
+}
+
+// GetBindLinuxDoURL 获取绑定LinuxDO的OAuth URL
+func (h *AuthHandler) GetBindLinuxDoURL(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	// 获取用户的 token（从 Authorization header 中提取）
+	authHeader := c.GetHeader("Authorization")
+	token := ""
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		token = authHeader[7:]
+	}
+
+	authURL, state, err := h.authService.GetBindLinuxDoURL(userID, token)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, &dto.OAuthURLResponse{
+		URL:   authURL,
+		State: state,
+	})
+}
+
+// UnbindLinuxDo 解绑LinuxDO
+func (h *AuthHandler) UnbindLinuxDo(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	user, err := h.authService.UnbindLinuxDo(userID)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, dto.ToUserResponse(user))
+}
+
+// BindEmail 绑定邮箱（LinuxDO用户专用）
+func (h *AuthHandler) BindEmail(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	var req dto.BindEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	user, err := h.authService.BindEmail(userID, &req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, dto.ToUserResponse(user))
+}
+
+// UpdateProfile 更新用户资料
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	var req dto.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	user, err := h.authService.UpdateProfile(userID, &req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, dto.ToUserResponse(user))
+}
+
+// SendEmailCode 发送邮箱验证码
+func (h *AuthHandler) SendEmailCode(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	var req dto.SendEmailCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	err := h.authService.SendEmailVerificationCode(userID, req.Email)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.SuccessMessage(c, "验证码已发送")
+}
+
+// ChangeEmail 修改邮箱
+func (h *AuthHandler) ChangeEmail(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	var req dto.ChangeEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	user, err := h.authService.ChangeEmail(userID, &req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, dto.ToUserResponse(user))
+}
+
+// UpdateAvatar 更新头像
+func (h *AuthHandler) UpdateAvatar(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+
+	var req dto.UpdateAvatarRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	user, err := h.authService.UpdateAvatar(userID, &req)
 	if err != nil {
 		response.Error(c, err.Error())
 		return

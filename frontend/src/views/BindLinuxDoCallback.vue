@@ -3,19 +3,19 @@
     <div class="callback-container">
       <a-spin v-if="loading" size="large">
         <template #tip>
-          <span class="loading-text">正在登录...</span>
+          <span class="loading-text">正在处理...</span>
         </template>
       </a-spin>
       <div v-else-if="error" class="error-state">
         <CloseCircleOutlined class="error-icon" />
-        <h2>登录失败</h2>
+        <h2>绑定失败</h2>
         <p>{{ error }}</p>
-        <a-button type="primary" @click="goToLogin">返回登录</a-button>
+        <a-button type="primary" @click="goToProfile">返回个人资料</a-button>
       </div>
       <div v-else class="success-state">
         <CheckCircleOutlined class="success-icon" />
-        <h2>登录成功</h2>
-        <p>正在跳转...</p>
+        <h2>绑定成功</h2>
+        <p>正在跳转到个人资料页面...</p>
       </div>
     </div>
   </div>
@@ -44,40 +44,46 @@ onMounted(async () => {
       throw new Error(errorDesc || 'OAuth授权失败')
     }
 
-    // 从URL获取token
+    // 检查是否是绑定成功的回调
+    const success = route.query.success as string
     const token = route.query.token as string
+
+    if (success !== 'true') {
+      throw new Error('无效的回调参数')
+    }
 
     if (!token) {
       throw new Error('缺少登录凭证')
     }
 
-    // 先保存token到localStorage
+    // 恢复 token
     localStorage.setItem('token', token)
-    
-    // 获取用户信息
+
+    // 获取最新的用户信息（包含绑定后的 LinuxDO 信息）
     const response = await getCurrentUser()
     const user = response.data.data
-    
-    // 设置登录状态
+
+    // 更新用户状态
     userStore.setAuth(token, user)
-    
+
     loading.value = false
-    
+
     // 延迟跳转，让用户看到成功状态
     setTimeout(() => {
-      const redirect = route.query.redirect as string
-      router.push(redirect || '/')
-    }, 1000)
-  } catch (e) {
+      router.push('/profile')
+    }, 1500)
+  } catch (e: unknown) {
     loading.value = false
-    // 清除可能保存的无效token
-    localStorage.removeItem('token')
-    error.value = e instanceof Error ? e.message : 'OAuth登录失败，请重试'
+    if (e instanceof Error) {
+      error.value = e.message
+    } else {
+      error.value = '绑定失败，请重试'
+    }
   }
 })
 
-const goToLogin = () => {
-  router.push('/login')
+const goToProfile = () => {
+  router.push('/profile')
 }
 </script>
 
@@ -128,5 +134,7 @@ h2 {
 p {
   color: var(--text-secondary);
   margin: 0;
+  max-width: 300px;
+  line-height: 1.6;
 }
 </style>

@@ -19,8 +19,9 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Port int    `yaml:"port"`
-	Mode string `yaml:"mode"`
+	Port        int    `yaml:"port"`
+	Mode        string `yaml:"mode"`
+	FrontendURL string `yaml:"frontend_url"` // 前端地址，用于OAuth回调重定向
 }
 
 // DatabaseConfig 数据库配置

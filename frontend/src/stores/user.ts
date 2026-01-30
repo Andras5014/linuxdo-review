@@ -17,6 +17,14 @@ export const useUserStore = defineStore('user', () => {
   const isCertified = computed(() => 
     user.value?.role === UserRole.Certified || user.value?.role === UserRole.Admin
   )
+  // 是否绑定了 Linux.do 账号
+  const isLinuxDoBound = computed(() => !!user.value?.linuxdo_id)
+  // 信任等级
+  const trustLevel = computed(() => user.value?.trust_level || 0)
+  // 是否可以进行二级审核 (trust_level >= 3 或管理员)
+  const canReview = computed(() => 
+    user.value?.role === UserRole.Admin || (user.value?.trust_level || 0) >= 3
+  )
   const username = computed(() => user.value?.username || user.value?.email || '用户')
 
   // 初始化用户状态
@@ -88,6 +96,9 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     isAdmin,
     isCertified,
+    isLinuxDoBound,
+    trustLevel,
+    canReview,
     username,
     
     // 方法

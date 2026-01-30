@@ -19,6 +19,10 @@ const (
 	ContextUsernameKey = "username"
 	// ContextUserRoleKey 上下文中用户角色的key
 	ContextUserRoleKey = "user_role"
+	// ContextTrustLevelKey 上下文中信任等级的key
+	ContextTrustLevelKey = "trust_level"
+	// ContextLinuxDoIDKey 上下文中LinuxDo ID的key
+	ContextLinuxDoIDKey = "linuxdo_id"
 )
 
 // JWTAuth JWT认证中间件
@@ -53,6 +57,8 @@ func JWTAuth(cfg *config.Config) gin.HandlerFunc {
 		c.Set(ContextUserEmailKey, claims.Email)
 		c.Set(ContextUsernameKey, claims.Username)
 		c.Set(ContextUserRoleKey, claims.Role)
+		c.Set(ContextTrustLevelKey, claims.TrustLevel)
+		c.Set(ContextLinuxDoIDKey, claims.LinuxDoID)
 
 		c.Next()
 	}
@@ -77,6 +83,8 @@ func OptionalJWTAuth(cfg *config.Config) gin.HandlerFunc {
 				c.Set(ContextUserEmailKey, claims.Email)
 				c.Set(ContextUsernameKey, claims.Username)
 				c.Set(ContextUserRoleKey, claims.Role)
+				c.Set(ContextTrustLevelKey, claims.TrustLevel)
+				c.Set(ContextLinuxDoIDKey, claims.LinuxDoID)
 			}
 		}
 
@@ -100,4 +108,22 @@ func GetUserRole(c *gin.Context) int {
 		return 0
 	}
 	return role.(int)
+}
+
+// GetTrustLevel 从上下文获取信任等级
+func GetTrustLevel(c *gin.Context) int {
+	level, exists := c.Get(ContextTrustLevelKey)
+	if !exists {
+		return 0
+	}
+	return level.(int)
+}
+
+// GetLinuxDoID 从上下文获取LinuxDo ID
+func GetLinuxDoID(c *gin.Context) string {
+	id, exists := c.Get(ContextLinuxDoIDKey)
+	if !exists {
+		return ""
+	}
+	return id.(string)
 }

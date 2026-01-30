@@ -154,11 +154,11 @@ func ToPostResponseList(posts []*models.Post) []*PostResponse {
 
 // VoteResponse 投票响应
 type VoteResponse struct {
-	PostID    uint             `json:"post_id"`
-	VoteType  models.VoteType  `json:"vote_type"`
-	UpVotes   int              `json:"up_votes"`
-	DownVotes int              `json:"down_votes"`
-	Message   string           `json:"message"`
+	PostID    uint            `json:"post_id"`
+	VoteType  models.VoteType `json:"vote_type"`
+	UpVotes   int             `json:"up_votes"`
+	DownVotes int             `json:"down_votes"`
+	Message   string          `json:"message"`
 }
 
 // ConfigResponse 配置响应
@@ -212,18 +212,18 @@ func NewPaginationResponse(list interface{}, total int64, page, pageSize int) *P
 
 // StatsResponse 统计响应
 type StatsResponse struct {
-	TotalUsers       int64 `json:"total_users"`
-	CertifiedUsers   int64 `json:"certified_users"`
-	TotalPosts       int64 `json:"total_posts"`
-	PendingPosts     int64 `json:"pending_posts"`
-	FirstReviewPosts int64 `json:"first_review_posts"`
+	TotalUsers        int64 `json:"total_users"`
+	CertifiedUsers    int64 `json:"certified_users"`
+	TotalPosts        int64 `json:"total_posts"`
+	PendingPosts      int64 `json:"pending_posts"`
+	FirstReviewPosts  int64 `json:"first_review_posts"`
 	SecondReviewPosts int64 `json:"second_review_posts"`
-	ApprovedPosts    int64 `json:"approved_posts"`
-	RejectedPosts    int64 `json:"rejected_posts"`
-	TotalVotes       int64 `json:"total_votes"`
-	TodayNewUsers    int64 `json:"today_new_users"`
-	TodayNewPosts    int64 `json:"today_new_posts"`
-	TodayApproved    int64 `json:"today_approved"`
+	ApprovedPosts     int64 `json:"approved_posts"`
+	RejectedPosts     int64 `json:"rejected_posts"`
+	TotalVotes        int64 `json:"total_votes"`
+	TodayNewUsers     int64 `json:"today_new_users"`
+	TodayNewPosts     int64 `json:"today_new_posts"`
+	TodayApproved     int64 `json:"today_approved"`
 }
 
 // OAuthURLResponse OAuth跳转URL响应

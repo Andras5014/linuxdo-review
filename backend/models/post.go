@@ -27,9 +27,11 @@ type Post struct {
 	DownVotes    int        `gorm:"default:0" json:"down_votes"`
 	ReviewerID   *uint      `gorm:"index" json:"reviewer_id,omitempty"`
 	Reviewer     *User      `gorm:"foreignKey:ReviewerID" json:"reviewer,omitempty"`
-	InviteCode   string     `gorm:"size:255" json:"-"` // 邀请码(加密存储,不返回给前端)
+	InviteCode   string     `gorm:"size:255" json:"-"`                       // 邀请码(加密存储,不返回给前端)
 	RejectReason string     `gorm:"size:500" json:"reject_reason,omitempty"` // 拒绝原因
-	ReviewedAt   *time.Time `json:"reviewed_at,omitempty"` // 审核时间
+	ReviewedAt   *time.Time `json:"reviewed_at,omitempty"`                   // 审核时间
+	LockedBy     *uint      `gorm:"index" json:"locked_by,omitempty"`        // 锁定者ID(防止并发操作)
+	LockedAt     *time.Time `json:"locked_at,omitempty"`                     // 锁定时间
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }

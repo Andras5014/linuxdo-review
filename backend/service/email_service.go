@@ -1,12 +1,30 @@
 package service
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
+	"math/big"
 	"net/smtp"
+	"sync"
+	"time"
 
 	"linuxdo-review/config"
 )
+
+// EmailVerificationCode 邮箱验证码
+type EmailVerificationCode struct {
+	Code      string
+	Email     string
+	UserID    uint
+	ExpiresAt time.Time
+}
+
+// 验证码存储
+var emailCodeStore = struct {
+	sync.RWMutex
+	codes map[string]EmailVerificationCode
+}{codes: make(map[string]EmailVerificationCode)}
 
 // EmailService 邮件服务
 type EmailService struct {
@@ -181,4 +199,103 @@ func (s *EmailService) SendNotification(to, subject, body string) error {
 		return nil
 	}
 	return s.send(to, subject, body)
+}
+
+// generateVerificationCode 生成6位数字验证码
+func generateVerificationCode() string {
+	code := ""
+	for i := 0; i < 6; i++ {
+		n, _ := rand.Int(rand.Reader, big.NewInt(10))
+		code += fmt.Sprintf("%d", n.Int64())
+	}
+	return code
+}
+
+// SendEmailVerificationCode 发送邮箱验证码
+func (s *EmailService) SendEmailVerificationCode(to string, userID uint) (string, error) {
+	// 生成验证码
+	code := generateVerificationCode()
+
+	// 存储验证码（10分钟过期）
+	emailCodeStore.Lock()
+	emailCodeStore.codes[fmt.Sprintf("%d:%s", userID, to)] = EmailVerificationCode{
+		Code:      code,
+		Email:     to,
+		UserID:    userID,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}
+	emailCodeStore.Unlock()
+
+	// 清理过期验证码
+	go cleanExpiredEmailCodes()
+
+	if !s.enabled {
+		log.Printf("[EmailService] SMTP未配置,跳过发送验证码邮件给 %s, 验证码: %s", to, code)
+		return code, nil
+	}
+
+	subject := "您的邮箱验证码"
+	body := fmt.Sprintf(`您好：
+
+您正在修改Linux.do Review系统的绑定邮箱。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+您的验证码是：%s
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+此验证码10分钟内有效，请勿泄露给他人。
+
+如果这不是您本人的操作，请忽略此邮件。
+
+---
+此邮件由Linux.do Review系统自动发送，请勿回复。
+`, code)
+
+	if err := s.send(to, subject, body); err != nil {
+		log.Printf("[EmailService] 发送验证码邮件失败: %v", err)
+		return "", err
+	}
+
+	log.Printf("[EmailService] 验证码邮件已发送给 %s", to)
+	return code, nil
+}
+
+// VerifyEmailCode 验证邮箱验证码
+func (s *EmailService) VerifyEmailCode(userID uint, email, code string) bool {
+	emailCodeStore.Lock()
+	defer emailCodeStore.Unlock()
+
+	key := fmt.Sprintf("%d:%s", userID, email)
+	storedCode, exists := emailCodeStore.codes[key]
+	if !exists {
+		return false
+	}
+
+	// 检查是否过期
+	if time.Now().After(storedCode.ExpiresAt) {
+		delete(emailCodeStore.codes, key)
+		return false
+	}
+
+	// 验证码匹配
+	if storedCode.Code != code {
+		return false
+	}
+
+	// 验证成功后删除验证码
+	delete(emailCodeStore.codes, key)
+	return true
+}
+
+// cleanExpiredEmailCodes 清理过期的验证码
+func cleanExpiredEmailCodes() {
+	emailCodeStore.Lock()
+	defer emailCodeStore.Unlock()
+
+	now := time.Now()
+	for key, data := range emailCodeStore.codes {
+		if now.After(data.ExpiresAt) {
+			delete(emailCodeStore.codes, key)
+		}
+	}
 }

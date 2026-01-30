@@ -10,7 +10,7 @@
         
         <nav class="nav">
           <router-link to="/posts" class="nav-link active">申请列表</router-link>
-          <router-link v-if="userStore.isCertified" to="/review" class="nav-link">二级审核</router-link>
+          <router-link v-if="userStore.canReview" to="/review" class="nav-link">二级审核</router-link>
           <router-link v-if="userStore.isAdmin" to="/admin" class="nav-link">管理后台</router-link>
           
           <!-- 主题切换按钮 -->
@@ -32,6 +32,10 @@
               </div>
               <template #overlay>
                 <a-menu>
+                  <a-menu-item key="profile" @click="$router.push('/profile')">
+                    <UserOutlined />
+                    <span>个人资料</span>
+                  </a-menu-item>
                   <a-menu-item key="my-posts" @click="$router.push('/my-posts')">
                     <FileTextOutlined />
                     <span>我的申请</span>
@@ -115,12 +119,13 @@
 
               <div class="post-footer">
                 <div class="vote-section">
-                  <a-tooltip title="赞成">
+                  <a-tooltip :title="getVoteTooltip(1)">
                     <a-button
                       :type="post.userVote === 1 ? 'primary' : 'default'"
+                      :class="{ 'vote-up-active': post.userVote === 1 }"
                       shape="round"
                       size="small"
-                      :disabled="!userStore.isLoggedIn || post.status !== 1"
+                      :disabled="!canVote(post)"
                       @click="handleVote(post.id, 1)"
                       class="vote-btn up"
                     >
@@ -128,13 +133,13 @@
                       <span class="vote-count">{{ post.up_votes }}</span>
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip title="反对">
+                  <a-tooltip :title="getVoteTooltip(-1)">
                     <a-button
                       :type="post.userVote === -1 ? 'primary' : 'default'"
                       :class="{ 'vote-down-active': post.userVote === -1 }"
                       shape="round"
                       size="small"
-                      :disabled="!userStore.isLoggedIn || post.status !== 1"
+                      :disabled="!canVote(post)"
                       @click="handleVote(post.id, -1)"
                       class="vote-btn down"
                     >
@@ -204,8 +209,9 @@
           <div class="vote-section">
             <a-button
               :type="selectedPost.userVote === 1 ? 'primary' : 'default'"
+              :class="{ 'vote-up-active': selectedPost.userVote === 1 }"
               size="large"
-              :disabled="!userStore.isLoggedIn || selectedPost.status !== 1"
+              :disabled="!canVote(selectedPost)"
               @click="handleVote(selectedPost.id, 1)"
               class="vote-btn up"
             >
@@ -216,7 +222,7 @@
               :type="selectedPost.userVote === -1 ? 'primary' : 'default'"
               :class="{ 'vote-down-active': selectedPost.userVote === -1 }"
               size="large"
-              :disabled="!userStore.isLoggedIn || selectedPost.status !== 1"
+              :disabled="!canVote(selectedPost)"
               @click="handleVote(selectedPost.id, -1)"
               class="vote-btn down"
             >
@@ -252,6 +258,7 @@ import {
   PlusOutlined,
   LikeOutlined,
   DislikeOutlined,
+  UserOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
@@ -314,6 +321,25 @@ const handleFilterChange = () => {
   fetchPosts()
 }
 
+// 检查是否可以投票
+const canVote = (post: PostWithVote) => {
+  if (!userStore.isLoggedIn) return false
+  if (!userStore.isLinuxDoBound) return false
+  if (post.status !== 1) return false
+  return true
+}
+
+// 获取投票按钮的提示信息
+const getVoteTooltip = (voteType: number) => {
+  if (!userStore.isLoggedIn) {
+    return '请先登录'
+  }
+  if (!userStore.isLinuxDoBound) {
+    return '请先绑定 Linux.do 账号后再投票'
+  }
+  return voteType === 1 ? '赞成' : '反对'
+}
+
 const handleVote = async (postId: number, voteType: number) => {
   if (!userStore.isLoggedIn) {
     message.warning('请先登录')
@@ -321,21 +347,23 @@ const handleVote = async (postId: number, voteType: number) => {
     return
   }
 
+  if (!userStore.isLinuxDoBound) {
+    message.warning('请先绑定 Linux.do 账号后再投票')
+    router.push('/profile')
+    return
+  }
+
   try {
-    await votePost(postId, { vote_type: voteType as VoteType })
-    message.success('投票成功')
+    const response = await votePost(postId, { vote_type: voteType as VoteType })
+    const voteResponse = response.data.data
+    message.success(voteResponse.message || '投票成功')
     
-    // 更新本地状态
+    // 使用后端返回的数据更新本地状态
     const post = posts.value.find(p => p.id === postId)
     if (post) {
-      if (voteType === 1) {
-        if (post.userVote === -1) post.down_votes--
-        else if (post.userVote !== 1) post.up_votes++
-      } else {
-        if (post.userVote === 1) post.up_votes--
-        else if (post.userVote !== -1) post.down_votes++
-      }
-      post.userVote = voteType
+      post.up_votes = voteResponse.up_votes
+      post.down_votes = voteResponse.down_votes
+      post.userVote = voteResponse.vote_type || 0
     }
 
     // 更新详情弹窗中的状态
@@ -765,21 +793,49 @@ onMounted(() => {
   gap: 4px;
   border-color: var(--border-color) !important;
   background: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+  transition: all 0.2s ease !important;
 }
 
 .vote-btn.up:hover:not(:disabled) {
   border-color: var(--color-success) !important;
   color: var(--color-success) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
 }
 
 .vote-btn.down:hover:not(:disabled) {
   border-color: var(--color-error) !important;
   color: var(--color-error) !important;
+  background: rgba(239, 68, 68, 0.1) !important;
 }
 
-.vote-down-active {
+/* 投票按钮激活状态 - 赞成 */
+.vote-up-active,
+.vote-btn.up.vote-up-active {
+  background: var(--color-success) !important;
+  border-color: var(--color-success) !important;
+  color: white !important;
+}
+
+.vote-up-active:hover:not(:disabled),
+.vote-btn.up.vote-up-active:hover:not(:disabled) {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: white !important;
+}
+
+/* 投票按钮激活状态 - 反对 */
+.vote-down-active,
+.vote-btn.down.vote-down-active {
   background: var(--color-error) !important;
   border-color: var(--color-error) !important;
+  color: white !important;
+}
+
+.vote-down-active:hover:not(:disabled),
+.vote-btn.down.vote-down-active:hover:not(:disabled) {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
   color: white !important;
 }
 

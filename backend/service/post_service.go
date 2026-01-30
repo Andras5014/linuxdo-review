@@ -17,6 +17,7 @@ type PostService struct {
 	postRepo   *repository.PostRepository
 	voteRepo   *repository.VoteRepository
 	configRepo *repository.ConfigRepository
+	userRepo   *repository.UserRepository
 	cfg        *config.Config
 }
 
@@ -25,18 +26,38 @@ func NewPostService(
 	postRepo *repository.PostRepository,
 	voteRepo *repository.VoteRepository,
 	configRepo *repository.ConfigRepository,
+	userRepo *repository.UserRepository,
 	cfg *config.Config,
 ) *PostService {
 	return &PostService{
 		postRepo:   postRepo,
 		voteRepo:   voteRepo,
 		configRepo: configRepo,
+		userRepo:   userRepo,
 		cfg:        cfg,
 	}
 }
 
 // Create 创建帖子
 func (s *PostService) Create(userID uint, req *dto.CreatePostRequest) (*models.Post, error) {
+	// 检查用户是否已有已通过的帖子
+	hasApproved, err := s.postRepo.HasApprovedPost(userID)
+	if err != nil {
+		return nil, errors.New("检查用户状态失败")
+	}
+	if hasApproved {
+		return nil, errors.New("您已有已通过的申请，不能再次发起申请")
+	}
+
+	// 检查用户是否有正在投票中或待审核的帖子
+	hasPending, err := s.postRepo.HasPendingOrVotingPost(userID)
+	if err != nil {
+		return nil, errors.New("检查用户状态失败")
+	}
+	if hasPending {
+		return nil, errors.New("您已有进行中的申请，请等待审核完成后再发起新申请")
+	}
+
 	post := &models.Post{
 		UserID:  userID,
 		Title:   req.Title,
@@ -82,6 +103,16 @@ func (s *PostService) ListByUserID(userID uint, page, pageSize int) ([]*models.P
 
 // Vote 投票
 func (s *PostService) Vote(postID, userID uint, voteType models.VoteType) error {
+	// 检查用户
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return errors.New("用户不存在")
+	}
+	// 管理员可以直接投票，其他用户需要绑定 Linux.do
+	if !user.IsAdmin() && user.LinuxDoID == "" {
+		return errors.New("请先绑定 Linux.do 账号后再投票")
+	}
+
 	// 检查帖子是否存在且处于一级审核状态
 	post, err := s.postRepo.FindByID(postID)
 	if err != nil {

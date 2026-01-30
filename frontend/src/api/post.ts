@@ -13,7 +13,7 @@ export const getReviewPosts = (params?: { page?: number; page_size?: number }) =
 
 // 获取我的申请列表
 export const getMyPosts = (params?: { page?: number; page_size?: number }) => {
-  return request.get<ApiResponse<PaginatedResponse<Post>>>('/posts/my', { params })
+  return request.get<ApiResponse<PaginatedResponse<Post>>>('/user/posts', { params })
 }
 
 // 获取帖子详情
@@ -31,14 +31,25 @@ export const votePost = (id: number, data: VoteRequest) => {
   return request.post<ApiResponse<null>>(`/posts/${id}/vote`, data)
 }
 
+// 获取下一个待审核的帖子
+export const getNextReviewPost = (skipIds?: number[]) => {
+  const params = skipIds?.length ? { skip_ids: skipIds.join(',') } : {}
+  return request.get<ApiResponse<{ post: Post | null; total: number }>>('/review/next', { params })
+}
+
+// 跳过当前帖子
+export const skipPost = (id: number) => {
+  return request.post<ApiResponse<null>>(`/review/${id}/skip`)
+}
+
 // 通过审核并提交邀请码
 export const approvePost = (id: number, data: ApproveRequest) => {
-  return request.post<ApiResponse<null>>(`/posts/${id}/approve`, data)
+  return request.post<ApiResponse<null>>(`/review/${id}/approve`, data)
 }
 
 // 拒绝申请
 export const rejectPost = (id: number, reason?: string) => {
-  return request.post<ApiResponse<null>>(`/posts/${id}/reject`, { reason })
+  return request.post<ApiResponse<null>>(`/review/${id}/reject`, { reason })
 }
 
 // 获取系统统计数据

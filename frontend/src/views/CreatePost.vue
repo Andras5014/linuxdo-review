@@ -10,7 +10,7 @@
         
         <nav class="nav">
           <router-link to="/posts" class="nav-link">申请列表</router-link>
-          <router-link v-if="userStore.isCertified" to="/review" class="nav-link">二级审核</router-link>
+          <router-link v-if="userStore.canReview" to="/review" class="nav-link">二级审核</router-link>
           <router-link v-if="userStore.isAdmin" to="/admin" class="nav-link">管理后台</router-link>
           
           <!-- 主题切换按钮 -->
@@ -31,6 +31,10 @@
             </div>
             <template #overlay>
               <a-menu>
+                <a-menu-item key="profile" @click="$router.push('/profile')">
+                  <UserOutlined />
+                  <span>个人资料</span>
+                </a-menu-item>
                 <a-menu-item key="my-posts" @click="$router.push('/my-posts')">
                   <FileTextOutlined />
                   <span>我的申请</span>
@@ -64,7 +68,35 @@
         </div>
 
         <div class="form-card">
+          <!-- 加载状态 -->
+          <div v-if="checkingStatus" class="status-loading">
+            <a-spin tip="检查申请状态..." />
+          </div>
+
+          <!-- 不能创建申请的提示 -->
+          <div v-else-if="!canCreatePost" class="status-blocked">
+            <div class="blocked-icon" :class="hasApprovedPost ? 'success' : 'warning'">
+              <CheckCircleOutlined v-if="hasApprovedPost" />
+              <ClockCircleOutlined v-else />
+            </div>
+            <h3 class="blocked-title">{{ hasApprovedPost ? '您已获得邀请码' : '有申请正在审核中' }}</h3>
+            <p class="blocked-message">{{ disabledReason }}</p>
+            <div class="blocked-actions">
+              <router-link to="/my-posts">
+                <a-button type="primary" size="large">
+                  <template #icon><FileTextOutlined /></template>
+                  查看我的申请
+                </a-button>
+              </router-link>
+              <router-link to="/posts">
+                <a-button size="large">返回申请列表</a-button>
+              </router-link>
+            </div>
+          </div>
+
+          <!-- 正常的申请表单 -->
           <a-form
+            v-else
             :model="formState"
             :rules="rules"
             layout="vertical"
@@ -186,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -201,10 +233,15 @@ import {
   TeamOutlined,
   SafetyCertificateOutlined,
   MailOutlined,
+  UserOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
-import { createPost } from '@/api/post'
+import { createPost, getMyPosts } from '@/api/post'
+import { PostStatus } from '@/types'
+import type { Post } from '@/types'
 import type { Rule } from 'ant-design-vue/es/form'
 
 const router = useRouter()
@@ -221,6 +258,55 @@ const formState = reactive({
 })
 
 const submitting = ref(false)
+const checkingStatus = ref(true)
+const myPosts = ref<Post[]>([])
+
+// 检查是否有已通过的申请
+const hasApprovedPost = computed(() => {
+  return myPosts.value.some(post => post.status === PostStatus.Approved)
+})
+
+// 检查是否有进行中的申请
+const hasPendingPost = computed(() => {
+  return myPosts.value.some(post =>
+    post.status === PostStatus.Pending ||
+    post.status === PostStatus.FirstReview ||
+    post.status === PostStatus.SecondReview
+  )
+})
+
+// 是否可以创建申请
+const canCreatePost = computed(() => {
+  return !hasApprovedPost.value && !hasPendingPost.value
+})
+
+// 不能创建申请的原因
+const disabledReason = computed(() => {
+  if (hasApprovedPost.value) {
+    return '您已有已通过的申请，不能再次发起申请'
+  }
+  if (hasPendingPost.value) {
+    return '您已有进行中的申请，请等待审核完成后再发起新申请'
+  }
+  return ''
+})
+
+// 检查用户申请状态
+const checkUserPosts = async () => {
+  checkingStatus.value = true
+  try {
+    const response = await getMyPosts({ page: 1, page_size: 100 })
+    myPosts.value = response.data.data.list || []
+  } catch {
+    // 错误已在拦截器中处理
+  } finally {
+    checkingStatus.value = false
+  }
+}
+
+onMounted(() => {
+  checkUserPosts()
+})
 
 const rules: Record<string, Rule[]> = {
   title: [
@@ -466,6 +552,65 @@ const handleLogout = () => {
   padding: 40px;
   margin-bottom: 32px;
   backdrop-filter: blur(20px);
+}
+
+/* Status Loading */
+.status-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+/* Status Blocked */
+.status-blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 60px 40px;
+}
+
+.blocked-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  margin-bottom: 24px;
+}
+
+.blocked-icon.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+}
+
+.blocked-icon.warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-warning);
+}
+
+.blocked-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.blocked-message {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+  max-width: 400px;
+}
+
+.blocked-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .create-form :deep(.ant-form-item-label > label) {

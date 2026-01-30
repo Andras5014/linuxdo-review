@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"linuxdo-review/config"
 	"linuxdo-review/database"
@@ -13,8 +14,18 @@ import (
 )
 
 func main() {
+	// 配置文件路径：优先使用环境变量，其次当前目录，最后父目录
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		if _, err := os.Stat("config.yaml"); err == nil {
+			configPath = "config.yaml"
+		} else {
+			configPath = "../config.yaml"
+		}
+	}
+
 	// 加载配置
-	cfg, err := config.Load("../config.yaml")
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
@@ -38,9 +49,9 @@ func main() {
 	}
 
 	// 初始化Service层
-	authService := service.NewAuthService(userRepo, cfg)
-	postService := service.NewPostService(postRepo, voteRepo, configRepo, cfg)
 	emailService := service.NewEmailService(cfg)
+	authService := service.NewAuthService(userRepo, cfg, emailService)
+	postService := service.NewPostService(postRepo, voteRepo, configRepo, userRepo, cfg)
 	reviewService := service.NewReviewService(postRepo, userRepo, configRepo, emailService)
 	adminService := service.NewAdminService(userRepo, postRepo, voteRepo, configRepo)
 

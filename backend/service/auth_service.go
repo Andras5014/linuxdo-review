@@ -34,6 +34,10 @@ const (
 type OAuthState struct {
 	State     string
 	ExpiresAt time.Time
+	// 绑定模式专用字段
+	BindMode bool   // 是否是绑定模式
+	UserID   uint   // 绑定模式下的用户ID
+	Token    string // 绑定模式下的用户Token（用于前端恢复登录状态）
 }
 
 // oauthStateStore 简单的内存状态存储
@@ -44,17 +48,19 @@ var oauthStateStore = struct {
 
 // AuthService 认证服务
 type AuthService struct {
-	userRepo    *repository.UserRepository
-	jwtManager  *jwt.JWTManager
-	oauthConfig *config.LinuxDoOAuthConfig
+	userRepo     *repository.UserRepository
+	jwtManager   *jwt.JWTManager
+	oauthConfig  *config.LinuxDoOAuthConfig
+	emailService *EmailService
 }
 
 // NewAuthService 创建认证服务
-func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config, emailService *EmailService) *AuthService {
 	return &AuthService{
-		userRepo:    userRepo,
-		jwtManager:  jwt.NewJWTManager(cfg.JWT.Secret, cfg.JWT.ExpireHours),
-		oauthConfig: &cfg.OAuth.LinuxDo,
+		userRepo:     userRepo,
+		jwtManager:   jwt.NewJWTManager(cfg.JWT.Secret, cfg.JWT.ExpireHours),
+		oauthConfig:  &cfg.OAuth.LinuxDo,
+		emailService: emailService,
 	}
 }
 
@@ -107,7 +113,7 @@ func (s *AuthService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 	}
 
 	// 生成JWT Token
-	token, err := s.jwtManager.GenerateToken(user.ID, user.Email, user.Username, int(user.Role))
+	token, err := s.jwtManager.GenerateToken(user.ID, user.Email, user.Username, int(user.Role), user.TrustLevel, user.LinuxDoID)
 	if err != nil {
 		return nil, errors.New("生成Token失败")
 	}
@@ -223,7 +229,7 @@ func (s *AuthService) oauthLoginOrRegister(userInfo *LinuxDoUserInfo) (*dto.Logi
 	}
 
 	// 生成JWT Token
-	token, err := s.jwtManager.GenerateToken(user.ID, user.Email, user.Username, int(user.Role))
+	token, err := s.jwtManager.GenerateToken(user.ID, user.Email, user.Username, int(user.Role), user.TrustLevel, user.LinuxDoID)
 	if err != nil {
 		return nil, errors.New("生成Token失败")
 	}
@@ -262,6 +268,7 @@ func (s *AuthService) GetOAuthURL() (string, string, error) {
 	params.Set("client_id", s.oauthConfig.ClientID)
 	params.Set("redirect_uri", s.oauthConfig.RedirectURI)
 	params.Set("response_type", "code")
+	params.Set("scope", "user")
 	params.Set("state", state)
 
 	authURL := fmt.Sprintf("%s?%s", linuxDoAuthorizeURL, params.Encode())
@@ -269,10 +276,19 @@ func (s *AuthService) GetOAuthURL() (string, string, error) {
 	return authURL, state, nil
 }
 
-// HandleOAuthCallback 处理OAuth回调
-func (s *AuthService) HandleOAuthCallback(code, state string) (*dto.LoginResponse, error) {
-	// 验证state
-	if !validateState(state) {
+// OAuthCallbackResult OAuth回调结果
+type OAuthCallbackResult struct {
+	LoginResponse *dto.LoginResponse // 登录模式返回
+	BindUser      *models.User       // 绑定模式返回绑定后的用户
+	IsBindMode    bool               // 是否是绑定模式
+	UserToken     string             // 绑定模式下原用户的token
+}
+
+// HandleOAuthCallback 处理OAuth回调（支持登录和绑定两种模式）
+func (s *AuthService) HandleOAuthCallback(code, state string) (*OAuthCallbackResult, error) {
+	// 获取并验证state
+	stateData, valid := getAndValidateState(state)
+	if !valid {
 		return nil, errors.New("无效的state参数")
 	}
 
@@ -288,8 +304,266 @@ func (s *AuthService) HandleOAuthCallback(code, state string) (*dto.LoginRespons
 		return nil, fmt.Errorf("获取用户信息失败: %w", err)
 	}
 
-	// 登录或注册
-	return s.oauthLoginOrRegister(userInfo)
+	// 根据模式处理
+	if stateData.BindMode {
+		// 绑定模式：将LinuxDO账号绑定到现有用户
+		user, err := s.bindLinuxDoToUser(stateData.UserID, userInfo)
+		if err != nil {
+			return nil, err
+		}
+		return &OAuthCallbackResult{
+			BindUser:   user,
+			IsBindMode: true,
+			UserToken:  stateData.Token,
+		}, nil
+	}
+
+	// 登录模式：登录或注册
+	loginResp, err := s.oauthLoginOrRegister(userInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &OAuthCallbackResult{
+		LoginResponse: loginResp,
+		IsBindMode:    false,
+	}, nil
+}
+
+// bindLinuxDoToUser 内部方法：将LinuxDO账号绑定到现有用户
+func (s *AuthService) bindLinuxDoToUser(userID uint, linuxDoInfo *LinuxDoUserInfo) (*models.User, error) {
+	linuxDoID := fmt.Sprintf("%d", linuxDoInfo.ID)
+
+	// 检查该LinuxDo账号是否已被其他用户绑定
+	existingUser, err := s.userRepo.FindByLinuxDoID(linuxDoID)
+	if err == nil && existingUser != nil && existingUser.ID != userID {
+		return nil, errors.New("该LinuxDo账号已被其他用户绑定")
+	}
+
+	// 获取当前用户
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	// 更新用户的LinuxDo信息
+	user.LinuxDoID = linuxDoID
+	user.LinuxDoUsername = linuxDoInfo.Username
+	user.AvatarURL = linuxDoInfo.AvatarURL
+	user.TrustLevel = linuxDoInfo.TrustLevel
+
+	// 如果信任等级>=2，提升为认证用户
+	if linuxDoInfo.TrustLevel >= 2 && user.Role == models.RoleNormal {
+		user.Role = models.RoleCertified
+	}
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("绑定失败")
+	}
+
+	return user, nil
+}
+
+// GetBindLinuxDoURL 获取绑定LinuxDO的OAuth URL (绑定模式，使用标准回调地址)
+func (s *AuthService) GetBindLinuxDoURL(userID uint, userToken string) (string, string, error) {
+	if s.oauthConfig.ClientID == "" {
+		return "", "", errors.New("OAuth未配置")
+	}
+
+	// 生成随机state防止CSRF攻击
+	state, err := generateRandomState()
+	if err != nil {
+		return "", "", errors.New("生成state失败")
+	}
+
+	// 存储state(5分钟过期)，包含绑定模式信息
+	oauthStateStore.Lock()
+	oauthStateStore.states[state] = OAuthState{
+		State:     state,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		BindMode:  true,
+		UserID:    userID,
+		Token:     userToken,
+	}
+	oauthStateStore.Unlock()
+
+	// 清理过期的state
+	go cleanExpiredStates()
+
+	// 使用配置的标准回调地址
+	callbackURL := s.oauthConfig.RedirectURI
+
+	// 构建授权URL
+	params := url.Values{}
+	params.Set("client_id", s.oauthConfig.ClientID)
+	params.Set("redirect_uri", callbackURL)
+	params.Set("response_type", "code")
+	params.Set("scope", "user")
+	params.Set("state", state)
+
+	authURL := fmt.Sprintf("%s?%s", linuxDoAuthorizeURL, params.Encode())
+
+	return authURL, state, nil
+}
+
+// BindEmail 绑定邮箱（适用于LinuxDO登录用户）
+func (s *AuthService) BindEmail(userID uint, req *dto.BindEmailRequest) (*models.User, error) {
+	// 获取当前用户
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	// 检查用户是否已经有真实邮箱（不是占位邮箱）
+	if user.Password != "" {
+		return nil, errors.New("您已绑定邮箱，无法重复绑定")
+	}
+
+	// 检查邮箱是否已被其他用户使用
+	existingUser, err := s.userRepo.FindByEmail(req.Email)
+	if err == nil && existingUser != nil && existingUser.ID != userID {
+		return nil, errors.New("该邮箱已被其他用户使用")
+	}
+
+	// 密码加密
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, errors.New("密码加密失败")
+	}
+
+	// 更新用户邮箱和密码
+	user.Email = req.Email
+	user.Password = string(hashedPassword)
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("绑定邮箱失败")
+	}
+
+	return user, nil
+}
+
+// UnbindLinuxDo 解绑LinuxDO账号
+func (s *AuthService) UnbindLinuxDo(userID uint) (*models.User, error) {
+	// 获取当前用户
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	// 检查用户是否有密码（邮箱注册用户）
+	if user.Password == "" {
+		return nil, errors.New("OAuth登录用户不能解绑LinuxDo账号")
+	}
+
+	// 清除LinuxDo绑定信息
+	user.LinuxDoID = ""
+	user.LinuxDoUsername = ""
+	user.TrustLevel = 0
+
+	// 如果用户是因为LinuxDo而获得的认证用户权限，降级为普通用户
+	// 注意：管理员不会被降级
+	if user.Role == models.RoleCertified {
+		user.Role = models.RoleNormal
+	}
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("解绑失败")
+	}
+
+	return user, nil
+}
+
+// UpdateProfile 更新用户资料
+func (s *AuthService) UpdateProfile(userID uint, req *dto.UpdateProfileRequest) (*models.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	if req.Username != "" {
+		user.Username = req.Username
+	}
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("更新资料失败")
+	}
+
+	return user, nil
+}
+
+// SendEmailVerificationCode 发送邮箱验证码
+func (s *AuthService) SendEmailVerificationCode(userID uint, newEmail string) error {
+	// 检查用户是否存在
+	_, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return errors.New("用户不存在")
+	}
+
+	// 检查新邮箱是否已被其他用户使用
+	existingUser, err := s.userRepo.FindByEmail(newEmail)
+	if err == nil && existingUser != nil && existingUser.ID != userID {
+		return errors.New("该邮箱已被其他用户使用")
+	}
+
+	// 发送验证码
+	if s.emailService == nil {
+		return errors.New("邮件服务未配置")
+	}
+
+	_, err = s.emailService.SendEmailVerificationCode(newEmail, userID)
+	if err != nil {
+		return errors.New("发送验证码失败")
+	}
+
+	return nil
+}
+
+// ChangeEmail 修改邮箱
+func (s *AuthService) ChangeEmail(userID uint, req *dto.ChangeEmailRequest) (*models.User, error) {
+	// 检查用户是否存在
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	// 检查新邮箱是否已被其他用户使用
+	existingUser, err := s.userRepo.FindByEmail(req.NewEmail)
+	if err == nil && existingUser != nil && existingUser.ID != userID {
+		return nil, errors.New("该邮箱已被其他用户使用")
+	}
+
+	// 验证验证码
+	if s.emailService == nil {
+		return nil, errors.New("邮件服务未配置")
+	}
+
+	if !s.emailService.VerifyEmailCode(userID, req.NewEmail, req.Code) {
+		return nil, errors.New("验证码无效或已过期")
+	}
+
+	// 更新邮箱
+	user.Email = req.NewEmail
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("修改邮箱失败")
+	}
+
+	return user, nil
+}
+
+// UpdateAvatar 更新头像
+func (s *AuthService) UpdateAvatar(userID uint, req *dto.UpdateAvatarRequest) (*models.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	user.AvatarURL = req.AvatarURL
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("更新头像失败")
+	}
+
+	return user, nil
 }
 
 // LinuxDoUserInfo Linux.do用户信息
@@ -314,10 +588,19 @@ type LinuxDoTokenResponse struct {
 
 // exchangeCodeForToken 用授权码换取access_token
 func (s *AuthService) exchangeCodeForToken(code string) (string, error) {
+	return s.exchangeCodeForTokenWithRedirectURI(code, s.oauthConfig.RedirectURI)
+}
+
+// exchangeCodeForTokenWithRedirectURI 用授权码换取access_token（自定义redirect_uri）
+func (s *AuthService) exchangeCodeForTokenWithRedirectURI(code, redirectURI string) (string, error) {
+	if redirectURI == "" {
+		redirectURI = s.oauthConfig.RedirectURI
+	}
+
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
-	data.Set("redirect_uri", s.oauthConfig.RedirectURI)
+	data.Set("redirect_uri", redirectURI)
 	data.Set("client_id", s.oauthConfig.ClientID)
 	data.Set("client_secret", s.oauthConfig.ClientSecret)
 
@@ -398,21 +681,31 @@ func generateRandomState() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// validateState 验证state
+// validateState 验证state（简单版本，仅返回是否有效）
 func validateState(state string) bool {
+	_, valid := getAndValidateState(state)
+	return valid
+}
+
+// getAndValidateState 获取并验证state，返回state数据和是否有效
+func getAndValidateState(state string) (OAuthState, bool) {
 	oauthStateStore.Lock()
 	defer oauthStateStore.Unlock()
 
 	storedState, exists := oauthStateStore.states[state]
 	if !exists {
-		return false
+		return OAuthState{}, false
 	}
 
 	// 删除已使用的state
 	delete(oauthStateStore.states, state)
 
 	// 检查是否过期
-	return time.Now().Before(storedState.ExpiresAt)
+	if time.Now().After(storedState.ExpiresAt) {
+		return OAuthState{}, false
+	}
+
+	return storedState, true
 }
 
 // cleanExpiredStates 清理过期的state

@@ -44,7 +44,7 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 // FindByLinuxDoID 根据Linux.do ID查找用户
 func (r *UserRepository) FindByLinuxDoID(linuxDoID string) (*models.User, error) {
 	var user models.User
-	err := r.db.Where("linuxdo_id = ?", linuxDoID).First(&user).Error
+	err := r.db.Where("linux_do_id = ?", linuxDoID).First(&user).Error
 	if err != nil {
 		return nil, err
 	}

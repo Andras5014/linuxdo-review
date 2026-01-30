@@ -104,3 +104,37 @@ type SetupAdminRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 	Username string `json:"username" binding:"required,min=2,max=50"`
 }
+
+// UpdateProfileRequest 更新个人资料请求
+type UpdateProfileRequest struct {
+	Username string `json:"username" binding:"omitempty,min=2,max=50"`
+}
+
+// BindLinuxDoCallbackRequest 绑定LinuxDO回调请求
+type BindLinuxDoCallbackRequest struct {
+	Code        string `json:"code" binding:"required"`
+	State       string `json:"state" binding:"required"`
+	RedirectURI string `json:"redirect_uri" binding:"required"`
+}
+
+// BindEmailRequest 绑定邮箱请求（适用于LinuxDO登录用户）
+type BindEmailRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+}
+
+// SendEmailCodeRequest 发送邮箱验证码请求
+type SendEmailCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// ChangeEmailRequest 修改邮箱请求
+type ChangeEmailRequest struct {
+	NewEmail string `json:"new_email" binding:"required,email"`
+	Code     string `json:"code" binding:"required,len=6"`
+}
+
+// UpdateAvatarRequest 更新头像请求
+type UpdateAvatarRequest struct {
+	AvatarURL string `json:"avatar_url" binding:"required,url"`
+}
