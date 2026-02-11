@@ -6,14 +6,11 @@ WORKDIR /app/frontend
 # 复制前端依赖文件
 COPY frontend/package*.json ./
 
-# 安装所有依赖（包括 devDependencies）
-RUN npm install --include=dev
-
 # 复制前端源码
 COPY frontend/ ./
 
-# 构建前端
-RUN npm run build
+# 安装所有依赖并构建
+RUN npm ci && npm run build
 
 # ==================== 阶段2: 构建后端 ====================
 FROM golang:1.21-bookworm AS backend-builder
